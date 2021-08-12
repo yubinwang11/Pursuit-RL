@@ -1,3 +1,4 @@
+This project is based on the Multi-Actor-Attention-Critic from Iqbal and Sha who are from USC. 
 # Multi-Actor-Attention-Critic
 Code for [*Actor-Attention-Critic for Multi-Agent Reinforcement Learning*](https://arxiv.org/abs/1810.02912) (Iqbal and Sha, ICML 2019)
 
@@ -22,9 +23,13 @@ The "Cooperative Treasure Collection" environment from our paper is referred to 
 
 In order to match our experiments, the maximum episode length should be set to 100 for Cooperative Treasure Collection and 25 for Rover-Tower.
 
-## Citing our work
+** How render this env
 
-If you use this repo in your work, please consider citing the corresponding paper:
+Please try to use visualization.py to render the environment during training.
+
+## Note
+
+please consider citing the corresponding paper from USC:
 
 ```bibtex
 @InProceedings{pmlr-v97-iqbal19a,
@@ -43,4 +48,3 @@ If you use this repo in your work, please consider citing the corresponding pape
   url =      {http://proceedings.mlr.press/v97/iqbal19a.html},
 }
 ```
-# pursuit_game
