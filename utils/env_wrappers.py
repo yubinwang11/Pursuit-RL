@@ -93,6 +93,8 @@ class SubprocVecEnv(VecEnv):
             p.join()
         self.closed = True
 
+    
+
 
 class DummyVecEnv(VecEnv):
     def __init__(self, env_fns):
@@ -127,3 +129,6 @@ class DummyVecEnv(VecEnv):
 
     def close(self):
         return
+
+    def get_images(self):
+        return self.envs[0].render(mode='rgb_array')

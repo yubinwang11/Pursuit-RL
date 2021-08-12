@@ -11,9 +11,9 @@ from utils.buffer import ReplayBuffer
 from utils.env_wrappers import SubprocVecEnv, DummyVecEnv
 from algorithms.attention_sac import AttentionSAC
 # CHANGE THIS!
-from envs.mpe_scenarios.multi_speaker_listener import Scenario
-from multiagent.core import World, Agent, Landmark
-from utils.environment import MultiAgentEnv
+#from envs.mpe_scenarios.multi_speaker_listener import Scenario
+#from multiagent.core import World, Agent, Landmark
+#from utils.environment import MultiAgentEnv
 
 
 
@@ -74,6 +74,7 @@ def run(config):
         model.prep_rollouts(device='cpu')
 
         for et_i in range(config.episode_length):
+
             # rearrange observations to be per agent, and convert to torch Variable
             torch_obs = [Variable(torch.Tensor(np.vstack(obs[:, i])),
                                   requires_grad=False)
@@ -87,19 +88,21 @@ def run(config):
             actions = [[ac[i] for ac in agent_actions] for i in range(config.n_rollout_threads)]
             next_obs, rewards, dones, infos = env.step(actions)
             
+            # CHANGE THIS!
+            #env.render() 
             
+            '''
             # CHANGE THIS!
             num_agents=4
             env.agents = [Agent() for i in range(num_agents)]
-            for i, agent in enumerate(env.agents):
-              render()
+            for i, agent in enumerate(env.agents):    
+                env.render()
             #print(agent_actions)
-            
+            '''
 
             replay_buffer.push(obs, agent_actions, rewards, next_obs, dones)
             obs = next_obs
-
-
+            
             t += config.n_rollout_threads
             if (len(replay_buffer) >= config.batch_size and
                 (t % config.steps_per_update) < config.n_rollout_threads):
@@ -124,12 +127,13 @@ def run(config):
             os.makedirs(run_dir / 'incremental', exist_ok=True)
             model.save(run_dir / 'incremental' / ('model_ep%i.pt' % (ep_i + 1)))
             model.save(run_dir / 'model.pt')
+        
 
     model.save(run_dir / 'model.pt')
     env.close()
     logger.export_scalars_to_json(str(log_dir / 'summary.json'))
     logger.close()
-
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -157,6 +161,7 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", default=0.99, type=float)
     parser.add_argument("--reward_scale", default=100., type=float)
     parser.add_argument("--use_gpu", action='store_true', default=True)
+    
 
     config = parser.parse_args()
 

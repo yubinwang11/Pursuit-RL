@@ -20,17 +20,17 @@ class Scenario(BaseScenario):
             agent.collide = True
             agent.silent = True
             agent.adversary = True if i < num_adversaries else False
-            agent.size = 0.075 if agent.adversary else 0.05
-            agent.accel = 3.0 if agent.adversary else 4.0
+            agent.size = 0.075/2 if agent.adversary else 0.05/2 #0.075 0.05
+            agent.accel = 3/8 if agent.adversary else 4/8 #3 4
             #agent.accel = 20.0 if agent.adversary else 25.0
-            agent.max_speed = 1.0 if agent.adversary else 1.3
+            agent.max_speed = 1.0/10 if agent.adversary else 1.3/10 #1.0 1.3
         # add landmarks
         world.landmarks = [Landmark() for i in range(num_landmarks)]
         for i, landmark in enumerate(world.landmarks):
             landmark.name = 'landmark %d' % i
             landmark.collide = True
             landmark.movable = False
-            landmark.size = 0.2
+            landmark.size = 0.02*5 # 0.02*5
             landmark.boundary = False
         # make initial conditions
         self.reset_world(world)
@@ -52,7 +52,11 @@ class Scenario(BaseScenario):
             landmark.color = np.array([0.25, 0.25, 0.25])
         # set random initial states
         for agent in world.agents:
-            agent.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
+            
+            # CHANGE THIS！
+            #agent.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
+            agent.state.p_pos = np.random.uniform(-0.5, +0.5, world.dim_p)
+
             agent.state.p_vel = np.zeros(world.dim_p)
             agent.state.c = np.zeros(world.dim_c)
         for i, landmark in enumerate(world.landmarks):
@@ -108,11 +112,20 @@ class Scenario(BaseScenario):
 
         # agents are penalized for exiting the screen, so that they can be caught by the adversaries
         def bound(x):
-            if x < 0.9:
+            #CHANGE THIS!
+            '''
+            if x < 0.9: # CHANGE THIS! 0.9
                 return 0
             if x < 1.0:
                 return (x - 0.9) * 10
             return min(np.exp(2 * x - 2), 10)
+            '''
+            if x < 0.7: 
+                return 0
+            if x < 1.0:
+                return (x - 0.7) * 10
+            return min(np.exp(2 * x - 2), 10)
+
         
         for p in range(world.dim_p):
             x = abs(agent.state.p_pos[p])
