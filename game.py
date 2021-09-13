@@ -1,5 +1,8 @@
 import argparse
 import torch
+import time
+import imageio
+from imageio import imsave
 import os
 import numpy as np
 from gym.spaces import Box, Discrete
@@ -10,21 +13,26 @@ from utils.make_env import make_env
 from utils.buffer import ReplayBuffer
 from utils.env_wrappers import SubprocVecEnv, DummyVecEnv
 from algorithms.attention_sac import AttentionSAC
+# CHANGE THIS!
+#from envs.mpe_scenarios.multi_speaker_listener import Scenario
+#from multiagent.core import World, Agent, Landmark
+#from utils.environment import MultiAgentEnv
 
 
-
+''''''
 def make_parallel_env(env_id, n_rollout_threads, seed):
     def get_env_fn(rank):
         def init_env():
             env = make_env(env_id, discrete_action=True)
-            env.seed(seed + rank * 1000)
-            np.random.seed(seed + rank * 1000)
+            #env.seed(seed + rank * 1000)
+            #np.random.seed(seed + rank * 1000)
             return env
         return init_env
     if n_rollout_threads == 1:
         return DummyVecEnv([get_env_fn(0)])
     else:
         return SubprocVecEnv([get_env_fn(i) for i in range(n_rollout_threads)])
+
 
 def run(config):
     model_dir = Path('./models') / config.env_id / config.model_name
@@ -37,38 +45,46 @@ def run(config):
         if len(exst_run_nums) == 0:
             run_num = 1
         else:
-            run_num = max(exst_run_nums) + 1 
+            # CHANGE This! run_num = max(exst_run_nums) + 1 
+            run_num = max(exst_run_nums)
+            # CHANGE THIS！
+            run_num -= 0 
     curr_run = 'run%i' % run_num
     run_dir = model_dir / curr_run
-    log_dir = run_dir / 'logs'
-    os.makedirs(log_dir)
-    logger = SummaryWriter(str(log_dir))
 
-    torch.manual_seed(run_num)
-    np.random.seed(run_num)
+    # add gifs saving path
+    gif_path = model_dir.parent / 'gifs_eval'
+    if config.save_gifs:
+        gif_path.mkdir(exist_ok=True)
+
+    fps = 10
+    ifi = 1 / fps  # inter-frame interval
+
+    #torch.manual_seed(run_num)
+    #np.random.seed(run_num)
     env = make_parallel_env(config.env_id, config.n_rollout_threads, run_num)
-    model = AttentionSAC.init_from_env(env,
-                                       tau=config.tau,
-                                       pi_lr=config.pi_lr,
-                                       q_lr=config.q_lr,
-                                       gamma=config.gamma,
-                                       pol_hidden_dim=config.pol_hidden_dim,
-                                       critic_hidden_dim=config.critic_hidden_dim,
-                                       attend_heads=config.attend_heads,
-                                       reward_scale=config.reward_scale)
+    #env = make_env(config.env_id, discrete_action=True)
+    
+    model = AttentionSAC.init_from_save(run_dir / 'model.pt')
+
     replay_buffer = ReplayBuffer(config.buffer_length, model.nagents,
                                  [obsp.shape[0] for obsp in env.observation_space],
                                  [acsp.shape[0] if isinstance(acsp, Box) else acsp.n
                                   for acsp in env.action_space])
     t = 0
     for ep_i in range(0, config.n_episodes, config.n_rollout_threads):
-        print("Episodes %i-%i of %i" % (ep_i + 1,
-                                        ep_i + 1 + config.n_rollout_threads,
-                                        config.n_episodes))
         obs = env.reset()
         model.prep_rollouts(device='cpu')
 
+        frames = []
+              
+        if config.save_gifs:
+            frames.append(env.render('rgb_array')[0])
+
         for et_i in range(config.episode_length):
+
+            # Save gifs
+            calc_start = time.time()
 
             # rearrange observations to be per agent, and convert to torch Variable
             torch_obs = [Variable(torch.Tensor(np.vstack(obs[:, i])),
@@ -83,51 +99,53 @@ def run(config):
             actions = [[ac[i] for ac in agent_actions] for i in range(config.n_rollout_threads)]
             next_obs, rewards, dones, infos = env.step(actions)
             
+            env.render('rgb_array')
+
+            # CHANGE THIS！
+            '''
+            image = env.render('rgb_array')[0]
+            imsave('et_i', image)
+            '''
+
+            if config.save_gifs:
+                #image = env.render('rgb_array')[0]
+                #frames.append(image)
+                #image = env.render('rgb_array')[0]
+                frames.append(env.render('rgb_array'))
+
+            calc_end = time.time()
+            elapsed = calc_end - calc_start
+
+            if elapsed < ifi:
+                time.sleep(ifi - elapsed)
+            
             replay_buffer.push(obs, agent_actions, rewards, next_obs, dones)
             obs = next_obs
-            
+          
             t += config.n_rollout_threads
-            if (len(replay_buffer) >= config.batch_size and
-                (t % config.steps_per_update) < config.n_rollout_threads):
-                if config.use_gpu:
-                    model.prep_training(device='gpu')
-                else:
-                    model.prep_training(device='cpu')
-                for u_i in range(config.num_updates):
-                    sample = replay_buffer.sample(config.batch_size,
-                                                  to_gpu=config.use_gpu)
-                    model.update_critic(sample, logger=logger)
-                    model.update_policies(sample, logger=logger)
-                    model.update_all_targets()
-                model.prep_rollouts(device='cpu')
-        ep_rews = replay_buffer.get_average_rewards(
-            config.episode_length * config.n_rollout_threads)
-        for a_i, a_ep_rew in enumerate(ep_rews):
-            logger.add_scalar('agent%i/mean_episode_rewards' % a_i,
-                              a_ep_rew * config.episode_length, ep_i)
-        if ep_i % config.save_interval < config.n_rollout_threads:
-            model.prep_rollouts(device='cpu')
-            os.makedirs(run_dir / 'incremental', exist_ok=True)
-            model.save(run_dir / 'incremental' / ('model_ep%i.pt' % (ep_i + 1)))
-            model.save(run_dir / 'model.pt')
-        
+  
+    if config.save_gifs:
+        gif_num = 0
+        while (gif_path / ('%i_%i.gif' % (gif_num, ep_i))).exists():
+            gif_num += 1
 
-    model.save(run_dir / 'model.pt')
-    env.close()
-    logger.export_scalars_to_json(str(log_dir / 'summary.json'))
-    logger.close()
+        imageio.mimsave(str(gif_path / ('%i_%i.gif' % (gif_num, ep_i))), frames, duration=ifi)
     
+
+
+    env.close()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--env_id", default="multi_speaker_listener", help="Name of environment")
     parser.add_argument("--model_name", default="multi_speaker_listener", 
-                        help="Name of directory to store " +
+                        help="Name of directory to load " +
                              "model/training contents")
-    parser.add_argument("--n_rollout_threads", default=12, type=int) # CHANGE THIS! default=12
+    parser.add_argument("--n_rollout_threads", default=1, type=int) # CHANGE THIS! default=12
     parser.add_argument("--buffer_length", default=int(1e6), type=int)
-    parser.add_argument("--n_episodes", default=50000, type=int) # CHANGE THIS! 50000
-    parser.add_argument("--episode_length", default=25, type=int) # ChANGE THIS! 25
+    parser.add_argument("--n_episodes", default=1, type=int) # CHANGE THIS! 50000
+    parser.add_argument("--episode_length", default=1000, type=int) # CHANGE THIS! 25 25*1000000000
     parser.add_argument("--steps_per_update", default=100, type=int)
     parser.add_argument("--num_updates", default=4, type=int,
                         help="Number of updates per update cycle")
@@ -145,6 +163,8 @@ if __name__ == '__main__':
     parser.add_argument("--reward_scale", default=100., type=float)
     parser.add_argument("--use_gpu", action='store_true', default=True)
     
+    # Add the argument of saving gifs
+    parser.add_argument('--save_gifs', default=True, type=bool)
 
     config = parser.parse_args()
 

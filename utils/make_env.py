@@ -57,5 +57,5 @@ def make_env(scenario_name, benchmark=False, discrete_action=False):
                             observation_callback=scenario.observation,                   
                             )
     return env
-    #env.render()
+
 ## post_step_callback=post_step, discrete_action=discrete_action

@@ -12,7 +12,7 @@ class Scenario(BaseScenario):
         num_good_agents = 1
         num_adversaries = 3
         num_agents = num_adversaries + num_good_agents
-        num_landmarks = 2
+        num_landmarks = 2 #2
         # add agents
         world.agents = [Agent() for i in range(num_agents)]
         for i, agent in enumerate(world.agents):
@@ -20,18 +20,21 @@ class Scenario(BaseScenario):
             agent.collide = True
             agent.silent = True
             agent.adversary = True if i < num_adversaries else False
-            agent.size = 0.075/2 if agent.adversary else 0.05/2 #0.075 0.05
-            agent.accel = 3/8 if agent.adversary else 4/8 #3 4
+            agent.size = 0.075 if agent.adversary else 0.05 #0.075 0.05
+            agent.accel = 0.5 if agent.adversary else 0.5 #3 4
             #agent.accel = 20.0 if agent.adversary else 25.0
-            agent.max_speed = 1.0/10 if agent.adversary else 1.3/10 #1.0 1.3
+            agent.max_speed = 0.2 if agent.adversary else 0.2 #1.0 1.3
         # add landmarks
         world.landmarks = [Landmark() for i in range(num_landmarks)]
         for i, landmark in enumerate(world.landmarks):
             landmark.name = 'landmark %d' % i
             landmark.collide = True
             landmark.movable = False
-            landmark.size = 0.02*5 # 0.02*5
+            landmark.size = 0.1 # 0.02*5
             landmark.boundary = False
+        
+        # CHANGE THIS！
+        world.landmarks += self.set_boundaries(world)
         # make initial conditions
         self.reset_world(world)
         ######self.reset_cached_rewards()
@@ -42,6 +45,36 @@ class Scenario(BaseScenario):
     def post_step(self, world):
         self.reset_cached_rewards()
     '''
+
+    
+    def set_boundaries(self, world):
+        boundary_list = []
+        landmark_size = 1
+        edge = 1 + landmark_size
+        num_landmarks = int(edge * 2 / landmark_size)
+        for x_pos in [-edge, edge]:
+            for i in range(num_landmarks):
+                l = Landmark()
+                l.state.p_pos = np.array([x_pos, -1 + i * landmark_size])
+                boundary_list.append(l)
+
+        for y_pos in [-edge, edge]:
+            for i in range(num_landmarks):
+                l = Landmark()
+                l.state.p_pos = np.array([-1 + i * landmark_size, y_pos])
+                boundary_list.append(l)
+
+        for i, l in enumerate(boundary_list):
+            l.name = 'boundary %d' % i
+            l.collide = True
+            l.movable = False
+            l.boundary = True
+            l.color = np.array([0.75, 0.75, 0.75])
+            l.size = landmark_size
+            l.state.p_vel = np.zeros(world.dim_p)
+
+        return boundary_list
+        
 
     def reset_world(self, world):
         # random properties for agents
@@ -54,8 +87,8 @@ class Scenario(BaseScenario):
         for agent in world.agents:
             
             # CHANGE THIS！
-            #agent.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
-            agent.state.p_pos = np.random.uniform(-0.5, +0.5, world.dim_p)
+            agent.state.p_pos = np.random.uniform(-1, +1, world.dim_p)
+            #agent.state.p_pos = np.random.uniform(-0.5, +0.5, world.dim_p)
 
             agent.state.p_vel = np.zeros(world.dim_p)
             agent.state.c = np.zeros(world.dim_c)
@@ -83,6 +116,26 @@ class Scenario(BaseScenario):
         dist_min = agent1.size + agent2.size
         return True if dist < dist_min else False
 
+    # CAHANGE THIS!
+    def is_collision_boundary(self, agent):
+        collide = 0
+        infsmall = 1e-4 * np.random.rand(1)
+        #if not cfg.bound_limit: return 0
+        if agent.state.p_pos[0] > 0.9:
+            collide = 1
+            agent.state.p_pos[0] = 0.9 - infsmall
+        if agent.state.p_pos[0] < -0.9:
+            collide = 2
+            agent.state.p_pos[0] = -0.9 + infsmall
+        if agent.state.p_pos[1] > 0.9:
+            collide = 3
+            agent.state.p_pos[1] = 0.9 - infsmall
+        if agent.state.p_pos[1] < -0.9:
+            collide = 4
+            agent.state.p_pos[1] = -0.9 + infsmall
+        return collide
+    
+    
     # return all agents that are not adversaries
     def good_agents(self, world):
         return [agent for agent in world.agents if not agent.adversary]
@@ -100,53 +153,92 @@ class Scenario(BaseScenario):
     def agent_reward(self, agent, world):
         # Agents are negatively rewarded if caught by adversaries
         rew = 0
-        shape = False
+        #shape = False
+        shape = True # CHANGE THIS！default shape = False
         adversaries = self.adversaries(world)
         if shape:  # reward can optionally be shaped (increased reward for increased distance from adversary)
             for adv in adversaries:
-                rew += 0.1 * np.sqrt(np.sum(np.square(agent.state.p_pos - adv.state.p_pos)))
+                #rew += 0.1 * np.sqrt(np.sum(np.square(agent.state.p_pos - adv.state.p_pos)))               
+                rew += 5 * np.sqrt(np.sum(np.square(agent.state.p_pos - adv.state.p_pos)))
         if agent.collide:
             for a in adversaries:
                 if self.is_collision(a, agent):
-                    rew -= 10
+                    rew -= 0 # default 10
+        '''
+        if self.is_collision_boundary(agent):
+            rew -= 20     
+        '''
 
         # agents are penalized for exiting the screen, so that they can be caught by the adversaries
-        def bound(x):
-            #CHANGE THIS!
-            '''
-            if x < 0.9: # CHANGE THIS! 0.9
+        '''
+        def bound(x):            
+            if x < 0.9: 
                 return 0
             if x < 1.0:
                 return (x - 0.9) * 10
             return min(np.exp(2 * x - 2), 10)
-            '''
-            if x < 0.7: 
-                return 0
-            if x < 1.0:
-                return (x - 0.7) * 10
-            return min(np.exp(2 * x - 2), 10)
-
+            
         
         for p in range(world.dim_p):
             x = abs(agent.state.p_pos[p])
-            rew -= bound(x)
+            rew -= 0.1 * bound(x)
+        '''
 
         return rew
 
     def adversary_reward(self, agent, world):
         # Adversaries are rewarded for collisions with agents
         rew = 0
-        shape = False
+        #shape = False
+        # CHANGE THIS！shape = FALSE default
+        shape = True
         agents = self.good_agents(world)
         adversaries = self.adversaries(world)
         if shape:  # reward can optionally be shaped (decreased reward for increased distance from agents)
             for adv in adversaries:
-                rew -= 0.1 * min([np.sqrt(np.sum(np.square(a.state.p_pos - adv.state.p_pos))) for a in agents])
+                #rew -= 0.1 * min([np.sqrt(np.sum(np.square(a.state.p_pos - adv.state.p_pos))) for a in agents])
+                #rew -= 10 * max([np.sqrt(np.sum(np.square(a.state.p_pos - adv.state.p_pos))) for a in agents])
+                distance_rew = max([np.sqrt(np.sum(np.square(a.state.p_pos - adv.state.p_pos))) for a in agents])
+                rew += 10 / (distance_rew + 0.1)
+        # CHANGE THIS！ Add the velocity of evader as feedback of pursuer
+        for agent in agents:
+            evader_vel = 0
+            evader_vel += np.linalg.norm(agent.state.p_vel)
+            
+        for adv in adversaries:
+            #if evader_vel == 0:
+            #    rew += 1000
+            if evader_vel != 0:
+                rew_gradient = 1 / (evader_vel + 0.1)
+                #rew_gradient = evader_vel + 0.1
+                rew += 3 * rew_gradient
+            else:
+                rew += 30
+
         if agent.collide:
             for ag in agents:
                 for adv in adversaries:
                     if self.is_collision(ag, adv):
-                        rew += 10
+                        rew += 0 # default 10
+
+        #if self.is_collision_boundary(agent):
+            #rew -= 1000
+
+        # agents are penalized for exiting the screen, so that they can be caught by the adversaries
+        '''
+        def bound(x):            
+            if x < 0.8: 
+                return 0
+            if x < 1.0:
+                return (x - 0.8) * 10
+            return min(np.exp(2 * x - 2), 10)
+            
+        
+        for p in range(world.dim_p):
+            x = abs(agent.state.p_pos[p])
+            rew -= 100 * bound(x)
+        '''
+
         return rew
 
     def observation(self, agent, world):
